@@ -1,8 +1,5 @@
 import { 
   PlusCircle, 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
   ChevronRight, 
   IndianRupee,
   ArrowUpCircle,
@@ -27,6 +24,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect, useState } from "react";
 
 import { useUser } from "@/hooks/useUser";
 import { useCreateSettlement, useDashboardStats, useRecentExpenses, useActiveGroups, useSettlements } from "./api";
@@ -34,9 +33,9 @@ import { useCreateSettlement, useDashboardStats, useRecentExpenses, useActiveGro
 
 function Dashboard() {
   const { userId } = useUser();
-  const { data: stats} = useDashboardStats(userId ?? "");
-  const { data: recentExpensesData } = useRecentExpenses(userId ?? "");
-  const { data: activeGroupsData} = useActiveGroups(userId ?? "");
+  const { data: stats, isLoading: isLoadingStats } = useDashboardStats(userId ?? "");
+  const { data: recentExpensesData, isLoading: isLoadingRecent } = useRecentExpenses(userId ?? "");
+  const { data: activeGroupsData, isLoading: isLoadingGroups } = useActiveGroups(userId ?? "");
   const selectedGroupId = activeGroupsData?.[0]?.id;
   const { data: settlements, isLoading: isLoadingSettlements } = useSettlements(selectedGroupId ?? "");
   const { mutate: createSettlement, isPending: isCreatingSettlement } = useCreateSettlement();
@@ -49,8 +48,9 @@ function Dashboard() {
       icon: <IndianRupee />,
       color: 'primary',
       bgColor: 'bg-primary/10',
+      bgGradient: 'bg-gradient-to-br from-orange-50 to-transparent',
       trend: 'neutral',
-      change: 'Current total'
+      change: 'Lifetime group expenses'
     },
     {
       title: 'You Owe',
@@ -58,8 +58,9 @@ function Dashboard() {
       icon: <ArrowUpCircle />,
       color: 'destructive',
       bgColor: 'bg-destructive/10',
+      bgGradient: 'bg-gradient-to-br from-red-50 to-transparent',
       trend: 'down',
-      change: 'Outstanding'
+      change: 'You owe'
     },
     {
       title: 'Owed to You',
@@ -67,8 +68,9 @@ function Dashboard() {
       icon: <ArrowDownCircle />,
       color: 'success',
       bgColor: 'bg-success/10',
+      bgGradient: 'bg-gradient-to-br from-green-50 to-transparent',
       trend: 'up',
-      change: 'To receive'
+      change: 'Owed to you'
     },
     {
       title: 'Active Groups',
@@ -76,10 +78,18 @@ function Dashboard() {
       icon: <Users />,
       color: 'info',
       bgColor: 'bg-blue-500/10',
+      bgGradient: 'bg-gradient-to-br from-blue-50 to-transparent',
       trend: 'neutral',
-      change: 'Current groups'
+      change: 'Active groups'
     }
   ] : [];
+
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const id = setTimeout(() => setMounted(true), 60);
+    return () => clearTimeout(id);
+  }, []);
 
   const recentExpenses = recentExpensesData?.map(expense => ({
     id: expense.id,
@@ -88,7 +98,8 @@ function Dashboard() {
     date: new Date(expense.createdAt).toLocaleDateString(),
     amount: expense.amount.toString(),
     status: 'pending',
-    avatar: expense.user.avatarUrl
+    avatar: expense.user.avatarUrl,
+    paidBy: expense.user.displayName
   })) ?? [];
 
   const quickActions = [
@@ -142,84 +153,107 @@ function Dashboard() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={`p-6 space-y-6 transition-all duration-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}>
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 mt-6 gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-primary">Dashboard</h2>
-          <p className="text-sm md:text-base text-muted-foreground">Track your expenses and group finances</p>
+          <h1 className="text-4xl font-extrabold text-primary">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">Track your shared expenses and balances.</p>
         </div>
-        <Button size="lg" className="flex items-center gap-2">
-          <PlusCircle className="h-5 w-5" />
-          Add Expense
-        </Button>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {summaryStats.map((stat, index) => (
-          <Card 
-            key={index} 
-            className={`${stat.bgColor} hover:translate-y-[-2px] transition-transform duration-200`}
+        {isLoadingStats ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="rounded-2xl border border-border/60 shadow-sm h-28 p-4">
+              <CardContent className="p-4">
+                <Skeleton className="h-6 w-24 mb-2" />
+                <Skeleton className="h-8 w-32" />
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          summaryStats.map((stat, index) => (
+          <Card
+            key={index}
+            className={`${stat.bgGradient} ${stat.bgColor} rounded-2xl border border-border/60 shadow-sm hover:shadow-lg transform hover:-translate-y-1 transition-all duration-300 h-28 backdrop-blur-sm`}
           >
-            <CardContent className="p-6 flex flex-col justify-between h-[140px]">
+            <CardContent className="p-4 flex flex-col justify-between h-full">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-xs text-muted-foreground">{stat.title}</p>
-                  <h3 className="text-xl font-bold mt-1">{stat.value}</h3>
+                  <h3 className={`text-3xl font-extrabold mt-1 transition-transform duration-500 ${mounted ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}>{stat.value}</h3>
                 </div>
-                <div className={`text-${stat.color}`}>{stat.icon}</div>
-              </div>
-              <div className="flex items-center mt-4">
-                {stat.trend === 'up' ? (
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                ) : stat.trend === 'down' ? (
-                  <TrendingDown className="h-4 w-4 text-destructive" />
-                ) : (
-                  <Minus className="h-4 w-4 text-yellow-500" />
-                )}
-                <span className="text-xs ml-1">{stat.change}</span>
+                <div className="flex flex-col items-end">
+                  <div className="h-10 w-10 rounded-md flex items-center justify-center text-white bg-white/10">{stat.icon}</div>
+                  <span className="text-xs text-muted-foreground mt-2">{stat.change}</span>
+                </div>
               </div>
             </CardContent>
           </Card>
+          ))
+        )}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {quickActions.slice(0,3).map((action, idx) => (
+          <a key={idx} href={action.to} className="flex items-center gap-3 p-4 rounded-2xl bg-card border border-border shadow-sm hover:shadow-lg transform hover:scale-105 transition-all duration-200">
+            <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center">{action.icon}</div>
+            <div>
+              <div className="text-sm font-medium">{action.title}</div>
+              <div className="text-xs text-muted-foreground">{action.subtitle}</div>
+            </div>
+          </a>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Expenses */}
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-10 gap-6">
+        {/* Recent Expenses (70%) */}
+        <div className="lg:col-span-7 md:col-span-2">
           <Card className="mb-6">
-            <CardHeader className="flex flex-row items-center justify-between py-4">
-              <CardTitle>Recent Expenses</CardTitle>
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-4 px-6 gap-3">
+              <CardTitle className="text-2xl">Recent Expenses</CardTitle>
               <Button variant="link" size="sm" asChild>
-                <a href="/expenses" className="flex items-center">
+                <a href="/expenses" className="flex items-center text-sm">
                   View All
                   <ChevronRight className="ml-1 h-4 w-4" />
                 </a>
               </Button>
             </CardHeader>
-            
+
             <div className="border-t border-border">
-              {recentExpenses.length > 0 ? (
+              {isLoadingRecent ? (
+                <div className="p-4 space-y-3">
+                  <Skeleton className="h-12" />
+                  <Skeleton className="h-12" />
+                  <Skeleton className="h-12" />
+                </div>
+              ) : recentExpenses.length > 0 ? (
                 <div className="divide-y divide-border">
                   {recentExpenses.map((expense) => (
-                    <div key={expense.id} className="flex items-center justify-between p-4">
-                      <div className="flex items-center">
-                        <Avatar className="h-10 w-10 mr-4">
-                          <AvatarImage src={expense.avatar} />
-                          <AvatarFallback>DP</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{expense.description}</p>
-                          <p className="text-xs text-muted-foreground">{expense.group} • {expense.date}</p>
+                    <div key={expense.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 hover:bg-muted/30 transition-transform duration-200 rounded-md gap-4">
+                      <div className="flex items-start gap-4 min-w-0 w-full sm:w-auto">
+                        <div className="flex flex-col items-center">
+                          <span className="h-3 w-3 rounded-full bg-primary mt-2" />
+                          <span className="w-px bg-border flex-1 mt-2" />
+                        </div>
+                        <div className="flex items-center gap-4 min-w-0 w-full">
+                          <Avatar className="h-10 w-10 flex-shrink-0">
+                            <AvatarImage src={expense.avatar} />
+                            <AvatarFallback>IC</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{expense.description}</p>
+                            <p className="text-xs text-muted-foreground truncate">{expense.group} • {expense.date}</p>
+                            <p className="text-xs text-muted-foreground truncate">Paid by {expense.paidBy}</p>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-bold">₹{expense.amount}</div>
-                        <Badge 
-                          variant="outline"
-                          className={expense.status === 'settled' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200'}
-                        >
+                      <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto text-left sm:text-right">
+                        <div className="text-lg font-bold">₹{expense.amount}</div>
+                        <Badge className={expense.status === 'settled' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200'}>
                           {expense.status}
                         </Badge>
                       </div>
@@ -227,115 +261,95 @@ function Dashboard() {
                   ))}
                 </div>
               ) : (
-               <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-  <div className="bg-muted rounded-full  p-4 mb-4">
-    <IndianRupee className="h-8 w-8 text-green-500 opacity-50" />
-  </div>
-  <h3 className="text-lg font-semibold text-green-700">No expenses yet</h3>
-  <p className="text-sm text-muted-foreground max-w-[250px] mx-auto mb-6">
-   Start by adding your first expense to track group spending.
-  </p>
-  <Button size="sm" variant="outline" className="flex items-center gap-2">
-    <PlusCircle className="h-4 w-4" />
-    Add First Expense
-  </Button>
-</div>
+                <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                  <div className="bg-muted rounded-full p-4 mb-4">
+                    <IndianRupee className="h-8 w-8 text-green-500 opacity-50" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-green-700">No expenses yet</h3>
+                  <p className="text-sm text-muted-foreground max-w-[250px] mx-auto mb-6">
+                    Start by adding your first expense to track group spending.
+                  </p>
+                  <Button size="sm" variant="outline" className="flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4" />
+                    Add First Expense
+                  </Button>
+                </div>
               )}
             </div>
           </Card>
         </div>
+        {/* Active Groups (30%) */}
+        <div className="lg:col-span-3 space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <h3 className="text-2xl font-semibold">Active Groups</h3>
+            <Button variant="link" size="sm" asChild>
+              <a href="/groups" className="flex items-center text-sm">View All <ChevronRight className="ml-1 h-4 w-4" /></a>
+            </Button>
+          </div>
 
-        {/* Quick Actions & Groups */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="px-6 pb-4 pt-0">
-              <div className="space-y-1">
-                {quickActions.map((action, index) => (
-                  <a 
-                    key={index} 
-                    href={action.to}
-                    className="flex items-center py-3 px-2 hover:bg-accent rounded-md transition-colors"
-                  >
-                    <div className="mr-3 text-primary">
-                      {action.icon}
-                    </div>
-                    <div>
-                      <div className="font-medium">{action.title}</div>
-                      <div className="text-xs text-muted-foreground">{action.subtitle}</div>
-                    </div>
-                  </a>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Active Groups */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between py-4">
-              <CardTitle>Active Groups</CardTitle>
-              <Button variant="link" size="sm" asChild>
-                <a href="/groups" className="flex items-center">
-                  View All
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </a>
-              </Button>
-            </CardHeader>
-            
-            <div className="border-t border-border">
-              {activeGroups.length > 0 ? (
-                <div className="divide-y divide-border">
-                  {activeGroups.map((group) => (
-                    <div key={group.id} className="flex items-center justify-between p-4">
-                      <div className="flex items-center">
-                        <div className={`h-10 w-10 ${group.color} rounded-full flex items-center justify-center text-white mr-4`}>
-                          {group.icon}
-                        </div>
-                        <div>
-                          <p className="font-medium">{group.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {group.members} members • ₹{group.totalExpenses} total
-                          </p>
-                        </div>
+          <div className="grid grid-cols-1 gap-4">
+            {isLoadingGroups && (
+              <>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="rounded-2xl border border-border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                      <Skeleton className="h-12 w-12 rounded-full" />
+                      <div className="w-full">
+                        <Skeleton className="h-4 w-28 mb-2" />
+                        <Skeleton className="h-3 w-20" />
                       </div>
-                      <Badge 
-                        variant="outline"
-                        className={
-                          group.balance > 0 
-                            ? 'bg-green-100 text-green-800 border-green-200' 
-                            : group.balance < 0 
-                              ? 'bg-destructive/10 text-destructive border-destructive/20' 
-                              : 'bg-blue-100 text-blue-800 border-blue-200'
-                        }
-                      >
-                        {group.balance > 0 ? '+' : ''}₹{Math.abs(group.balance)}
-                      </Badge>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-4">
-                  <Alert>
-                    <AlertTitle>No groups yet</AlertTitle>
-                    <p>Create your first group to start splitting expenses.</p>
-                    <Button variant="outline" size="sm" className="mt-2" asChild>
-                      <a href="/groups/create">Create Group</a>
-                    </Button>
-                  </Alert>
-                </div>
-              )}
-            </div>
-          </Card>
+                    <div className="text-left sm:text-right flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-6 w-20" />
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {!isLoadingGroups && activeGroups.length > 0 && (
+              <>
+                {activeGroups.map((group) => (
+                  <div key={group.id} className="rounded-xl border border-border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-transform duration-200 hover:-translate-y-1">
+                    <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto w-full sm:w-auto">
+                      <div className={`h-12 w-12 rounded-full flex items-center justify-center text-white ${group.color}`}>{group.icon}</div>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{group.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{group.members} members</p>
+                      </div>
+                    </div>
+                    <div className="text-left sm:text-right flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+                      <div className="text-sm text-muted-foreground">Your Balance</div>
+                      <div className={`text-lg font-bold ${group.balance > 0 ? 'text-green-500' : group.balance < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>{group.balance > 0 ? '+' : ''}₹{Math.abs(group.balance)}</div>
+                      <Button size="sm" variant="outline" className="rounded-full transition-transform duration-200 hover:scale-105 w-full sm:w-auto" asChild>
+                        <a href={`/groups/${group.id}`}>View</a>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {!isLoadingGroups && activeGroups.length === 0 && (
+              <div className="p-4">
+                <Alert>
+                  <AlertTitle>No groups yet</AlertTitle>
+                  <p>Create your first group to start splitting expenses.</p>
+                  <Button variant="outline" size="sm" className="mt-2" asChild>
+                    <a href="/groups/create">Create Group</a>
+                  </Button>
+                </Alert>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Settlements Section */}
       {selectedGroupId && (
-        <Card className="mb-6">
-          <CardHeader className="flex flex-row items-center justify-between py-4">
+        <Card className="mb-6 max-h-56 overflow-auto">
+          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-4 gap-3">
             <CardTitle>Suggested Settlements</CardTitle>
             {isLoadingSettlements && (
               <div className="text-sm text-muted-foreground">Loading...</div>
@@ -343,13 +357,18 @@ function Dashboard() {
           </CardHeader>
           <div className="border-t border-border">
             <div className="divide-y divide-border">
-              {mySettlements.length > 0 ? (
+              {isLoadingSettlements ? (
+                <div className="p-4 space-y-2">
+                  <Skeleton className="h-12" />
+                  <Skeleton className="h-12" />
+                </div>
+              ) : mySettlements.length > 0 ? (
                 mySettlements.map((settlement, index) => {
                   const amount = Number(settlement.amount);
 
                   return (
-                    <div key={`${settlement.from.id}-${settlement.to.id}-${index}`} className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-4">
+                    <div key={`${settlement.from.id}-${settlement.to.id}-${index}`} className="flex items-center justify-between p-3">
+                      <div className="flex items-center gap-3">
                         <Avatar>
                           <AvatarImage src={settlement.to.avatar ?? undefined} />
                           <AvatarFallback>{settlement.to.name?.[0] ?? "U"}</AvatarFallback>
@@ -364,22 +383,23 @@ function Dashboard() {
                         variant="outline"
                         onClick={() => handleSettle(settlement)}
                         disabled={isCreatingSettlement}
+                        className="transition-transform duration-200 hover:scale-105"
                       >
                         {isCreatingSettlement ? "Settling..." : "Settle Now"}
                       </Button>
                     </div>
                   );
-                })) : (
-                    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-  <div className="bg-muted rounded-full p-4 mb-3">
-    <Handshake className="h-8 w-8 text-green-500 opacity-80" />
-  </div>
-  <h3 className="text-sm font-bold text-green-700">All Settled Up!</h3>
-  <p className="text-xs text-muted-foreground">
-  All balances are settled in this group.
-  </p>
-</div>
-                
+                })
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                  <div className="bg-muted rounded-full p-4 mb-3">
+                    <Handshake className="h-8 w-8 text-green-500 opacity-80" />
+                  </div>
+                  <h3 className="text-sm font-bold text-green-700">You're all settled!</h3>
+                  <p className="text-xs text-muted-foreground">
+                    No pending settlements in this group.
+                  </p>
+                </div>
               )}
             </div>
           </div>

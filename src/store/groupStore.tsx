@@ -26,6 +26,9 @@ export interface Group {
   createdAt?: string;
   creatorId?: string;
   member?: GroupMember[]; // ✅ Added members array
+  balance?: string;
+  members?: number;
+  totalExpenses?: string;
 }
 
 interface GroupState {
