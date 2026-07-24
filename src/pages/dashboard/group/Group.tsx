@@ -8,7 +8,6 @@ import type { Group } from "../../../store/groupStore"
 import CreateExpenseForm from "../expence/CreateExpenseForm"
 import Icon from '@/components/shared/Icon'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogTrigger,
