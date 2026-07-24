@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useExpenses, useSettleExpense } from "./api"; // 👈 settle hook add
+import { getExpenseById, useExpenses } from "./api";
 import CreateExpenseForm from "./CreateExpenseForm";
 import { Search } from "lucide-react";
 import Icon from "@/components/shared/Icon";
@@ -20,20 +20,32 @@ import { Input } from "@/components/ui/input";
 
 function Expense() {
   const [isCreateExpenseFormOpen, setIsCreateExpenseFormOpen] = useState(false);
+  const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
+  const [selectedExpense, setSelectedExpense] = useState<any>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const { data: expenses, isLoading } = useExpenses();
-  const { mutate: settleExpense, isPending: isSettling } = useSettleExpense(); 
 
-  const handleSettle = (expense: any) => {
-    const settleData = {
-      group_id: expense.group_id,
-      from_user_id: expense.paid_by,
-      to_user_id: expense.paid_by, 
-      amount: Number(expense.amount), 
-      currency_code: expense.currency_code, 
-      method: "ONLINE" as const
-    };
-    settleExpense(settleData);
+  const handleOpenDetail = async (expenseId: string) => {
+    setSelectedExpenseId(expenseId);
+    setIsDetailLoading(true);
+    try {
+      const detail = await getExpenseById(expenseId);
+      setSelectedExpense(detail);
+    } catch (error) {
+      console.error("Failed to fetch expense detail", error);
+      setSelectedExpense(null);
+    } finally {
+      setIsDetailLoading(false);
+    }
   };
+
+  const paymentRows = useMemo(() => {
+    return selectedExpense?.expensePayments ?? [];
+  }, [selectedExpense]);
+
+  const splitRows = useMemo(() => {
+    return selectedExpense?.splitExpense ?? [];
+  }, [selectedExpense]);
 
   return (
     <div className="p-6 space-y-6">
@@ -140,18 +152,13 @@ function Expense() {
               <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start text-right gap-2 ml-auto">
                 <span className="text-xl font-bold whitespace-nowrap">₹{expense.amount}</span>
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <Button variant="ghostBlue" size="sm" className="whitespace-nowrap">
-                    View Details
-                  </Button>
                   <Button
-                    variant="ghostGreen"
+                    variant="ghostBlue"
                     size="sm"
-                    onClick={() => handleSettle(expense)}
-                    disabled={isSettling}
                     className="whitespace-nowrap"
+                    onClick={() => handleOpenDetail(expense.id)}
                   >
-                    Settle
-                    {/* {isSettling ? "Settling..." : "Settle"} */}
+                    View Details
                   </Button>
                 </div>
               </div>
@@ -159,6 +166,78 @@ function Expense() {
           </div>
         ))
       )}
+
+      <Dialog open={!!selectedExpenseId} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedExpenseId(null);
+          setSelectedExpense(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          {isDetailLoading ? (
+            <div className="py-6 text-sm text-muted-foreground">Loading expense details...</div>
+          ) : selectedExpense ? (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-xl font-semibold">{selectedExpense.description}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {selectedExpense.category} • {new Date(selectedExpense.expense_date).toLocaleDateString()}
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <h4 className="font-medium mb-2">Who paid</h4>
+                  <div className="text-sm text-muted-foreground">
+                    {selectedExpense.paid?.displayName || selectedExpense.paid_by || "Unknown"}
+                  </div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <h4 className="font-medium mb-2">Total amount</h4>
+                  <div className="text-sm font-semibold">₹{selectedExpense.amount}</div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <h4 className="font-medium mb-2">Payments</h4>
+                {paymentRows.length > 0 ? (
+                  <div className="space-y-2">
+                    {paymentRows.map((payment: any) => (
+                      <div key={payment.id} className="flex items-center justify-between text-sm">
+                        <span>{payment.user?.displayName || payment.user_id}</span>
+                        <span>₹{payment.amount_paid}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No payment details available.</div>
+                )}
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <h4 className="font-medium mb-2">Split details</h4>
+                {splitRows.length > 0 ? (
+                  <div className="space-y-2">
+                    {splitRows.map((split: any) => (
+                      <div key={split.id} className="flex items-center justify-between text-sm">
+                        <span>{split.splitUserId?.displayName || split.user_id}</span>
+                        <div className="text-right">
+                          <div>Exact: ₹{split.exact_amount}</div>
+                          <div className="text-muted-foreground">Percent: {split.percentage}%</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No split details available.</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="py-6 text-sm text-muted-foreground">No expense details available.</div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

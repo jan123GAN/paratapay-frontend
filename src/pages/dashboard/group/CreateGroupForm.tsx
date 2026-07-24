@@ -57,7 +57,9 @@ function CreateGroupForm({ onClose }: Props) {
   const onSubmit = (data: GroupFormData) => {
     const formData = new FormData();
     formData.append("name", data.name);
-    formData.append("description", data.description || "");
+    if (data.description) {
+      formData.append("description", data.description);
+    }
     formData.append("groupType", data.groupType);
     formData.append("createdBy", userId ?? "");
 

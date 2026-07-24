@@ -40,13 +40,8 @@ export const useGroup = (userId: string) => {
 
 const createGroup = async (formData: FormData): Promise<Group> => {
   try {
-    
-    const response = await apiInstance.post("/group", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    });
-    return response.data;
+    const response = await apiInstance.post("/group", formData);
+    return response.data.data;
   } catch (error) {
     console.error("API error:", error);
     throw error;
@@ -113,12 +108,12 @@ export const useUserSearch = (name: string) => {
 
 const addMemberToGroup = async (groupId: string, userId: string): Promise<GroupMembers> => {
   try {
-    const response = await apiInstance.post("/group/addmember",{
+    const response = await apiInstance.post("/group/addmember", {
       groupId,
-      userId
+      userId,
     });
     console.log("API response:", response.data);
-    return response.data;
+    return response.data.data;
   } catch (error) {
     console.error("API error:", error);
     throw error;
@@ -190,15 +185,19 @@ interface ExpensePayload {
   category: string;
   currency_code: string;
   expense_date: string;
-  split_type: "EQUAL_SPLIT" | "CUSTOM_SPLIT";
+  split_type: "EQUAL_SPLIT" | "EXACT_AMOUNT_SPLIT" | "PERCENTAGE_SPLIT";
   paid_by_data: Array<{ user_id: string; amount: number }>;
-  expense_data: Array<{ user_id: string; amount: number }>;
+  expense_data: Array<{
+    user_id: string;
+    amount?: number;
+    percentage?: number;
+  }>;
 }
 
 const createExpense = async (data: ExpensePayload): Promise<any> => {
   try {
     const response = await apiInstance.post("/expense", data);
-    return response.data;
+    return response.data?.data;
   } catch (error) {
     console.error("API error:", error);
     throw error;

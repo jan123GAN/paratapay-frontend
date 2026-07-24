@@ -16,6 +16,30 @@ interface GroupMembers {
 
 
 
+interface ExpenseUserSummary {
+  id: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+interface ExpensePayment {
+  id: string;
+  expense_id: string;
+  user_id: string;
+  amount_paid: string;
+  user?: ExpenseUserSummary;
+}
+
+interface ExpenseSplit {
+  id: string;
+  user_id: string;
+  own_by?: string;
+  amount: string;
+  percentage: string;
+  exact_amount: string;
+  splitUserId: ExpenseUserSummary;
+}
+
 interface Expense {
   id: string;
   group_id: string;
@@ -28,6 +52,10 @@ interface Expense {
   createdAt: string;
   updatedAt: string;
   paid_by: string;
+  paid?: ExpenseUserSummary;
+  currency_code?: string;
+  expensePayments?: ExpensePayment[];
+  splitExpense?: ExpenseSplit[];
 }
 
 const getExpenses = async (): Promise<Expense[]> => {
@@ -46,6 +74,11 @@ export const useExpenses = () => {
     queryKey: ['expenses'],
     queryFn: getExpenses
   });
+};
+
+export const getExpenseById = async (expenseId: string): Promise<Expense> => {
+  const response = await apiInstance.get(`/expense/${expenseId}`);
+  return response.data.data;
 };
 
 const getExpense = async ({ queryKey }: { queryKey: [string, string] }): Promise<Expense> => {

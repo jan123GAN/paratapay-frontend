@@ -29,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 
 import { useUser } from "@/hooks/useUser";
-import { useDashboardStats, useRecentExpenses, useActiveGroups, useSettlements } from "./api";
+import { useCreateSettlement, useDashboardStats, useRecentExpenses, useActiveGroups, useSettlements } from "./api";
 
 
 function Dashboard() {
@@ -39,6 +39,7 @@ function Dashboard() {
   const { data: activeGroupsData} = useActiveGroups(userId ?? "");
   const selectedGroupId = activeGroupsData?.[0]?.id;
   const { data: settlements, isLoading: isLoadingSettlements } = useSettlements(selectedGroupId ?? "");
+  const { mutate: createSettlement, isPending: isCreatingSettlement } = useCreateSettlement();
   // const { data: monthlySpendingData, isLoading: isLoadingSpending } = useMonthlySpending(userId ?? "");
 
   const summaryStats = stats ? [
@@ -123,6 +124,22 @@ function Dashboard() {
     icon: [<Plane className="h-5 w-5" />, <Building2 className="h-5 w-5" />, <Home className="h-5 w-5" />][index % 3],
     balance: Number(group.balance)
   })) ?? [];
+
+  const mySettlements = (settlements ?? []).filter((settlement) => settlement.from.id === userId);
+
+  const handleSettle = (settlement: { from: { id: string }; to: { id: string }; amount: string }) => {
+    if (!selectedGroupId) {
+      return;
+    }
+
+    createSettlement({
+      group_id: selectedGroupId,
+      from_user_id: settlement.from.id,
+      to_user_id: settlement.to.id,
+      amount: Number(settlement.amount),
+      method: "ONLINE",
+    });
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -326,37 +343,33 @@ function Dashboard() {
           </CardHeader>
           <div className="border-t border-border">
             <div className="divide-y divide-border">
-              {settlements && settlements.length > 0 ? (
-                settlements
-                  .filter(s => Number(s.amountToSettle) !== 0)
-                  .map((settlement, index) => (
-                    <div key={index} className="flex items-center justify-between p-4">
+              {mySettlements.length > 0 ? (
+                mySettlements.map((settlement, index) => {
+                  const amount = Number(settlement.amount);
+
+                  return (
+                    <div key={`${settlement.from.id}-${settlement.to.id}-${index}`} className="flex items-center justify-between p-4">
                       <div className="flex items-center gap-4">
                         <Avatar>
-                          <AvatarImage src={settlement.user.avatar} />
-                          <AvatarFallback>{settlement.user.name[0]}</AvatarFallback>
+                          <AvatarImage src={settlement.to.avatar ?? undefined} />
+                          <AvatarFallback>{settlement.to.name?.[0] ?? "U"}</AvatarFallback>
                         </Avatar>
                         <div>
-                          {settlement.isSettled ? (
-                            <div>
-                              <p className="text-sm font-medium text-green-600">Already Settled</p>
-                              <p className="text-xs text-muted-foreground">₹{Math.abs(Number(settlement.amountToSettle))}</p>
-                            </div>
-                          ) : (
-                            <div>
-                              <p className="text-sm font-medium">
-                                {Number(settlement.amountToSettle) > 0 ? 'Needs to pay' : 'Should receive'}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                ₹{Math.abs(Number(settlement.amountToSettle))}
-                              </p>
-                            </div>
-                          )}
+                          <p className="text-sm font-medium">You owe {settlement.to.name}</p>
+                          <p className="text-sm text-muted-foreground">₹{amount}</p>
                         </div>
                       </div>
-                     
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSettle(settlement)}
+                        disabled={isCreatingSettlement}
+                      >
+                        {isCreatingSettlement ? "Settling..." : "Settle Now"}
+                      </Button>
                     </div>
-                  ))) : (
+                  );
+                })) : (
                     <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
   <div className="bg-muted rounded-full p-4 mb-3">
     <Handshake className="h-8 w-8 text-green-500 opacity-80" />

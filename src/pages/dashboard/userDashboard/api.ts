@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiInstance } from "@/lib/api";
 
 interface DashboardStats {
@@ -31,13 +31,17 @@ interface ActiveGroup {
 }
 
 export interface Settlement {
-  user: {
+  from: {
     id: string;
     name: string;
-    avatar: string;
+    avatar: string | null;
   };
-  amountToSettle: string;
-  isSettled?: boolean;
+  to: {
+    id: string;
+    name: string;
+    avatar: string | null;
+  };
+  amount: string;
 }
 
 // Fetch dashboard summary stats
@@ -117,5 +121,28 @@ export const useSettlements = (groupId: string) => {
     queryKey: ["settlements", groupId],
     queryFn: () => getSettlements(groupId),
     enabled: !!groupId,
+  });
+};
+
+interface CreateSettlementPayload {
+  group_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  amount: number;
+  method: "ONLINE" | "CASH";
+}
+
+export const useCreateSettlement = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: CreateSettlementPayload) => {
+      const response = await apiInstance.post("/expense/settle", payload);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settlements"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
+    },
   });
 };
