@@ -5,7 +5,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { getExpenseById, useExpenses } from "./api";
 import CreateExpenseForm from "./CreateExpenseForm";
@@ -21,16 +20,41 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 
+// 🔑 Imports for Store & API
+import { useGroup } from "../group/api"; 
+import { useUser } from "@/hooks/useUser";
+import { useGroupStore } from "@/store/groupStore"; // 👈 Store import kar liya
+
 function Expense() {
-  const [isCreateExpenseFormOpen, setIsCreateExpenseFormOpen] = useState(false);
+  const { userId } = useUser();
+  const { group: activeStoreGroup } = useGroupStore(); // 👈 Current store se group uthaya
+  
+  const [isSelectGroupOpen, setIsSelectGroupOpen] = useState(false);
+  const [selectedGroupForCreate, setSelectedGroupForCreate] = useState<any | null>(null);
+
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<any>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
-  
-  // State for Settlement Modal
   const [settleExpenseData, setSettleExpenseData] = useState<any | null>(null);
 
-  const { data: expenses, isLoading } = useExpenses();
+  const { data: expenses, isLoading: isExpensesLoading } = useExpenses();
+  const { data: groups = [], isLoading: isGroupsLoading } = useGroup(userId ?? "");
+
+  // Main Action: Create Expense Button
+  const handleCreateExpenseClick = () => {
+    // 1. Agar Store mein already active group set hai, toh seedha uska form khol do
+    if (activeStoreGroup?.id) {
+      setSelectedGroupForCreate(activeStoreGroup);
+    } 
+    // 2. Agar API se ek hi group mila hai, toh usko direct pick kar lo
+    else if (groups.length === 1) {
+      setSelectedGroupForCreate(groups[0]);
+    } 
+    // 3. Nahi toh Group Selector Dialog dikhao
+    else {
+      setIsSelectGroupOpen(true);
+    }
+  };
 
   const handleOpenDetail = async (expenseId: string) => {
     setSelectedExpenseId(expenseId);
@@ -46,21 +70,12 @@ function Expense() {
     }
   };
 
-  const handleSettleExpense = (expense: any) => {
-    setSettleExpenseData(expense);
-  };
-
-  const paymentRows = useMemo(() => {
-    return selectedExpense?.expensePayments ?? [];
-  }, [selectedExpense]);
-
-  const splitRows = useMemo(() => {
-    return selectedExpense?.splitExpense ?? [];
-  }, [selectedExpense]);
+  const paymentRows = useMemo(() => selectedExpense?.expensePayments ?? [], [selectedExpense]);
+  const splitRows = useMemo(() => selectedExpense?.splitExpense ?? [], [selectedExpense]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 pb-24">
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-primary">Expenses</h2>
@@ -69,42 +84,84 @@ function Expense() {
           </p>
         </div>
 
-        {/* Create Expense Button */}
-        <Dialog
-          open={isCreateExpenseFormOpen}
-          onOpenChange={setIsCreateExpenseFormOpen}
+        <Button 
+          size="lg" 
+          className="w-full sm:w-auto flex items-center gap-2 shadow-md"
+          onClick={handleCreateExpenseClick}
         >
-          <DialogTrigger asChild>
-            <Button size="lg" className="w-full sm:w-auto flex items-center gap-2 shadow-md">
-              <Icon name="PlusCircle" size={18} />
-              <span>Create Expense</span>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg p-6">
-            <DialogHeader>
-              <DialogTitle>Create New Expense</DialogTitle>
-            </DialogHeader>
-            <CreateExpenseForm
-              onClose={() => setIsCreateExpenseFormOpen(false)}
-              groupId={""}
-            />
-          </DialogContent>
-        </Dialog>
+          <Icon name="PlusCircle" size={18} />
+          <span>Create Expense</span>
+        </Button>
       </div>
 
-      {/* Search + Filters Container */}
+      {/* 1. Group Selection Dialog (Only opens if multiple groups & none active in store) */}
+      <Dialog open={isSelectGroupOpen} onOpenChange={setIsSelectGroupOpen}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle>Select Group</DialogTitle>
+          </DialogHeader>
+
+          {isGroupsLoading ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Fetching your groups...</p>
+          ) : groups.length === 0 ? (
+            <div className="text-center py-4 space-y-2">
+              <p className="text-sm font-semibold text-destructive">No Groups Found</p>
+              <p className="text-xs text-muted-foreground">Please create or join a group first.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 pt-2 max-h-[260px] overflow-y-auto">
+              <p className="text-xs text-muted-foreground mb-2">Choose a group for this expense:</p>
+              {groups.map((g: any) => (
+                <div
+                  key={g.id}
+                  onClick={() => {
+                    setSelectedGroupForCreate(g);
+                    setIsSelectGroupOpen(false);
+                  }}
+                  className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon name="Users" size={16} className="text-muted-foreground" />
+                    <span className="font-medium text-sm">{g.name}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                    {g.member?.length ?? 0} members
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 2. Create Expense Modal (Original CreateExpenseForm call) */}
+      <Dialog 
+        open={!!selectedGroupForCreate} 
+        onOpenChange={(open) => {
+          if (!open) setSelectedGroupForCreate(null);
+        }}
+      >
+        <DialogContent className="max-w-lg p-6">
+          <DialogHeader>
+            <DialogTitle>Create Expense ({selectedGroupForCreate?.name})</DialogTitle>
+          </DialogHeader>
+          {selectedGroupForCreate && (
+            <CreateExpenseForm
+              onClose={() => setSelectedGroupForCreate(null)}
+              members={selectedGroupForCreate.member ?? []}
+              groupId={selectedGroupForCreate.id}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Filters & Expense List UI Section */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-card border rounded-xl p-3 md:p-4 shadow-sm">
-        {/* Search Bar */}
         <div className="relative w-full md:w-72">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            type="text" 
-            placeholder="Search expenses..." 
-            className="pl-9 h-9 text-xs md:text-sm w-full" 
-          />
+          <Input type="text" placeholder="Search expenses..." className="pl-9 h-9 text-xs md:text-sm w-full" />
         </div>
 
-        {/* Dropdown Filters */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full md:w-auto">
           <Select>
             <SelectTrigger className="h-9 text-xs">
@@ -112,8 +169,9 @@ function Expense() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Groups</SelectItem>
-              <SelectItem value="group1">Group 1</SelectItem>
-              <SelectItem value="group2">Group 2</SelectItem>
+              {groups.map((g: any) => (
+                <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -141,237 +199,35 @@ function Expense() {
         </div>
       </div>
 
-      {/* Expense List */}
+      {/* Expense List Rendering */}
       <div className="space-y-3">
-        {isLoading ? (
+        {isExpensesLoading ? (
           <div className="p-8 text-center text-sm text-muted-foreground">Loading expenses...</div>
         ) : !expenses || expenses.length === 0 ? (
           <div className="p-8 text-center border border-dashed rounded-xl space-y-2">
             <Icon name="Receipt" size={32} className="mx-auto text-muted-foreground opacity-50" />
             <p className="text-sm font-medium">No expenses found</p>
-            <p className="text-xs text-muted-foreground">Add an expense to start tracking splits.</p>
           </div>
         ) : (
-          expenses.map((expense) => {
-            const amount = Number(expense.amount) || 0;
-            const formattedDate = expense.expense_date 
-              ? new Date(expense.expense_date).toLocaleDateString() 
-              : "Recent";
-
-            return (
-              <div
-                key={expense.id}
-                className="p-3 md:p-4 border rounded-xl bg-card hover:shadow-md transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
-              >
-                {/* Left Section: Icon + Details */}
-                <div className="flex items-start gap-3 min-w-0 w-full sm:w-auto">
-                  <div className="bg-primary/10 text-primary rounded-lg p-2.5 shrink-0">
-                    <Icon name="Receipt" size={20} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-sm md:text-base truncate max-w-[180px] sm:max-w-[260px]">
-                        {expense.description || "Untitled Expense"}
-                      </h3>
-                      {expense.category && (
-                        <Badge variant="secondary" className="text-[10px] px-2 py-0">
-                          {expense.category}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                      Paid by <span className="font-medium text-foreground">{expense.paid_by || "Unknown"}</span> • {formattedDate}
-                    </p>
-                  </div>
+          expenses.map((expense: any) => (
+            <div key={expense.id} className="p-3 md:p-4 border rounded-xl bg-card flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="bg-primary/10 text-primary rounded-lg p-2.5 shrink-0">
+                  <Icon name="Receipt" size={20} />
                 </div>
-
-                {/* Right Section: Amount + Actions */}
-                <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto border-t sm:border-t-0 pt-2 sm:pt-0 gap-3 shrink-0">
-                  <div className="text-left sm:text-right">
-                    <span className="text-base md:text-lg font-bold block">₹{amount}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-8 px-2.5"
-                      onClick={() => handleOpenDetail(expense.id)}
-                    >
-                      Details
-                    </Button>
-                    <Button
-                      variant="ghostGreen"
-                      size="sm"
-                      className="text-xs h-8 px-2.5 flex items-center gap-1"
-                      onClick={() => handleSettleExpense(expense)}
-                    >
-                      <Icon name="CheckCircle2" size={14} />
-                      <span>Settle Up</span>
-                    </Button>
-                  </div>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-sm md:text-base truncate max-w-[200px]">{expense.description}</h3>
+                  <p className="text-xs text-muted-foreground">Paid by {expense.paid?.displayName || expense.paid_by}</p>
                 </div>
               </div>
-            );
-          })
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-base">₹{expense.amount}</span>
+                <Button variant="outline" size="sm" onClick={() => handleOpenDetail(expense.id)}>Details</Button>
+              </div>
+            </div>
+          ))
         )}
       </div>
-
-      {/* Expense Detail Dialog */}
-      <Dialog 
-        open={!!selectedExpenseId} 
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedExpenseId(null);
-            setSelectedExpense(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-md md:max-w-xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Expense Details</DialogTitle>
-          </DialogHeader>
-
-          {isDetailLoading ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              Loading expense details...
-            </div>
-          ) : selectedExpense ? (
-            <div className="space-y-4 pt-2">
-              <div className="flex justify-between items-start border-b pb-3">
-                <div>
-                  <h3 className="text-lg font-semibold">{selectedExpense.description}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedExpense.category || "General"} • {selectedExpense.expense_date ? new Date(selectedExpense.expense_date).toLocaleDateString() : ""}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xl font-bold text-primary">₹{Number(selectedExpense.amount) || 0}</span>
-                </div>
-              </div>
-
-              <div className="grid gap-3 grid-cols-2">
-                <div className="rounded-lg border p-3 bg-muted/30">
-                  <span className="text-xs text-muted-foreground block">Paid By</span>
-                  <span className="text-sm font-medium">
-                    {selectedExpense.paid?.displayName || selectedExpense.paid_by || "Unknown"}
-                  </span>
-                </div>
-                <div className="rounded-lg border p-3 bg-muted/30">
-                  <span className="text-xs text-muted-foreground block">Group</span>
-                  <span className="text-sm font-medium truncate block">
-                    {selectedExpense.group?.name || "Personal Expense"}
-                  </span>
-                </div>
-              </div>
-
-              {/* Payments Section */}
-              <div className="rounded-lg border p-3 space-y-2">
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Payment Breakdown</h4>
-                {paymentRows.length > 0 ? (
-                  <div className="space-y-1.5 divide-y divide-border/40">
-                    {paymentRows.map((payment: any) => (
-                      <div key={payment.id} className="flex items-center justify-between text-xs md:text-sm pt-1.5">
-                        <span>{payment.user?.displayName || payment.user_id}</span>
-                        <span className="font-semibold">₹{Number(payment.amount_paid) || 0}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground">No payment records.</div>
-                )}
-              </div>
-
-              {/* Split Details Section */}
-              <div className="rounded-lg border p-3 space-y-2">
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Split Breakdown</h4>
-                {splitRows.length > 0 ? (
-                  <div className="space-y-1.5 divide-y divide-border/40">
-                    {splitRows.map((split: any) => (
-                      <div key={split.id} className="flex items-center justify-between text-xs md:text-sm pt-1.5">
-                        <span>{split.splitUserId?.displayName || split.user_id}</span>
-                        <div className="text-right">
-                          <span className="font-semibold block">₹{Number(split.exact_amount) || 0}</span>
-                          <span className="text-[10px] text-muted-foreground">{split.percentage || 0}% share</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground">No split details available.</div>
-                )}
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <Button 
-                  variant="ghostGreen" 
-                  size="sm" 
-                  className="w-full sm:w-auto"
-                  onClick={() => {
-                    const exp = selectedExpense;
-                    setSelectedExpenseId(null);
-                    handleSettleExpense(exp);
-                  }}
-                >
-                  Settle This Expense
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              No details found.
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Settlement Confirmation Dialog */}
-      <Dialog 
-        open={!!settleExpenseData} 
-        onOpenChange={(open) => {
-          if (!open) setSettleExpenseData(null);
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Settle Expense</DialogTitle>
-          </DialogHeader>
-
-          {settleExpenseData && (
-            <div className="space-y-4 pt-2">
-              <div className="bg-muted/40 p-3 rounded-lg border text-sm space-y-1">
-                <p className="text-muted-foreground text-xs">Expense</p>
-                <p className="font-semibold text-foreground">{settleExpenseData.description}</p>
-                <p className="text-xs text-muted-foreground">Total: ₹{Number(settleExpenseData.amount) || 0}</p>
-              </div>
-
-              <p className="text-xs md:text-sm text-muted-foreground">
-                Confirming settlement will record full payment against this expense balance.
-              </p>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setSettleExpenseData(null)}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  variant="default" 
-                  size="sm" 
-                  onClick={() => {
-                    // Call settlement API here
-                    setSettleExpenseData(null);
-                  }}
-                >
-                  Confirm Settlement
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
