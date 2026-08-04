@@ -39,8 +39,7 @@ function Dashboard() {
   const selectedGroupId = activeGroupsData?.[0]?.id;
   const { data: settlements, isLoading: isLoadingSettlements } = useSettlements(selectedGroupId ?? "");
   const { mutate: createSettlement, isPending: isCreatingSettlement } = useCreateSettlement();
-  // const { data: monthlySpendingData, isLoading: isLoadingSpending } = useMonthlySpending(userId ?? "");
-
+  
   const summaryStats = stats ? [
     {
       title: 'Total Expenses',
