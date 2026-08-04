@@ -12,6 +12,8 @@ interface RecentExpense {
   id: string;
   description: string;
   amount: number;
+  category?: string;
+  isSettled?: boolean;
   group: {
     name: string;
   };
@@ -130,6 +132,7 @@ interface CreateSettlementPayload {
   to_user_id: string;
   amount: number;
   method: "ONLINE" | "CASH";
+  expense_id?: string;
 }
 
 export const useCreateSettlement = () => {

@@ -161,7 +161,8 @@ function Dashboard() {
     if (!recentExpensesData || recentExpensesData.length === 0) return [];
 
     const totals = recentExpensesData.reduce<Record<string, number>>((acc, expense) => {
-      acc[expense.category] = (acc[expense.category] ?? 0) + Number(expense.amount);
+      const category = expense.category ?? "Other";
+      acc[category] = (acc[category] ?? 0) + Number(expense.amount);
       return acc;
     }, {});
 
