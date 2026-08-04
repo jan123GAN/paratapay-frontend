@@ -12,6 +12,8 @@ interface RecentExpense {
   id: string;
   description: string;
   amount: number;
+  category: string;
+  isSettled: boolean;
   group: {
     name: string;
   };
@@ -42,6 +44,7 @@ export interface Settlement {
     avatar: string | null;
   };
   amount: string;
+  expense_id?: string;
 }
 
 // Fetch dashboard summary stats
@@ -130,6 +133,7 @@ interface CreateSettlementPayload {
   to_user_id: string;
   amount: number;
   method: "ONLINE" | "CASH";
+  expense_id?: string;
 }
 
 export const useCreateSettlement = () => {
@@ -143,6 +147,7 @@ export const useCreateSettlement = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settlements"] });
       queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
+      queryClient.invalidateQueries({ queryKey: ["recentExpenses"] });
     },
   });
 };

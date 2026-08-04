@@ -13,7 +13,6 @@ import {
   Home
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-// import {}
 import {
   Card,
   CardContent,
@@ -25,64 +24,82 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { Link } from "react-router-dom"; // Replace with "next/link" if using Next.js
 
 import { useUser } from "@/hooks/useUser";
-import { useCreateSettlement, useDashboardStats, useRecentExpenses, useActiveGroups, useSettlements } from "./api";
-
+import { useCreateSettlement, useDashboardStats, useRecentExpenses, useActiveGroups, useSettlements, useMonthlySpending } from "./api";
 
 function Dashboard() {
   const { userId } = useUser();
-  const { data: stats, isLoading: isLoadingStats } = useDashboardStats(userId ?? "");
-  const { data: recentExpensesData, isLoading: isLoadingRecent } = useRecentExpenses(userId ?? "");
-  const { data: activeGroupsData, isLoading: isLoadingGroups } = useActiveGroups(userId ?? "");
+  const { data: stats, isLoading: isLoadingStats, isError: isStatsError, error: statsError } = useDashboardStats(userId ?? "");
+  const { data: recentExpensesData, isLoading: isLoadingRecent, isError: isRecentError, error: recentError } = useRecentExpenses(userId ?? "");
+  const { data: activeGroupsData, isLoading: isLoadingGroups, isError: isGroupsError, error: groupsError } = useActiveGroups(userId ?? "");
+  
   const selectedGroupId = activeGroupsData?.[0]?.id;
-  const { data: settlements, isLoading: isLoadingSettlements } = useSettlements(selectedGroupId ?? "");
+  const { data: settlements, isLoading: isLoadingSettlements, isError: isSettlementsError, error: settlementsError } = useSettlements(selectedGroupId ?? "");
+  const { data: monthlySpendingData, isLoading: isLoadingMonthly, isError: isMonthlyError, error: monthlyError } = useMonthlySpending(userId ?? "");
   const { mutate: createSettlement, isPending: isCreatingSettlement } = useCreateSettlement();
-  // const { data: monthlySpendingData, isLoading: isLoadingSpending } = useMonthlySpending(userId ?? "");
 
-  const summaryStats = stats ? [
-    {
-      title: 'Total Expenses',
-      value: `₹${stats.totalExpenses}`,
-      icon: <IndianRupee />,
-      color: 'primary',
-      bgColor: 'bg-primary/10',
-      bgGradient: 'bg-gradient-to-br from-orange-50 to-transparent',
-      trend: 'neutral',
-      change: 'Lifetime group expenses'
-    },
-    {
-      title: 'You Owe',
-      value: `₹${stats.youOwe}`,
-      icon: <ArrowUpCircle />,
-      color: 'destructive',
-      bgColor: 'bg-destructive/10',
-      bgGradient: 'bg-gradient-to-br from-red-50 to-transparent',
-      trend: 'down',
-      change: 'You owe'
-    },
-    {
-      title: 'Owed to You',
-      value: `₹${stats.owedToYou}`,
-      icon: <ArrowDownCircle />,
-      color: 'success',
-      bgColor: 'bg-success/10',
-      bgGradient: 'bg-gradient-to-br from-green-50 to-transparent',
-      trend: 'up',
-      change: 'Owed to you'
-    },
-    {
-      title: 'Active Groups',
-      value: stats.activeGroups.toString(),
-      icon: <Users />,
-      color: 'info',
-      bgColor: 'bg-blue-500/10',
-      bgGradient: 'bg-gradient-to-br from-blue-50 to-transparent',
-      trend: 'neutral',
-      change: 'Active groups'
-    }
-  ] : [];
+  const totalSettlements = settlements?.length ?? 0;
+  const pendingAmount = stats?.youOwe ?? "0";
+  const settledAmount = stats?.owedToYou ?? "0";
+
+  const summaryStats = useMemo(() => {
+    if (!stats) return [];
+    return [
+      {
+        title: 'Total Expenses',
+        value: `₹${stats.totalExpenses ?? 0}`,
+        icon: <IndianRupee />,
+        color: 'primary',
+        bgColor: 'bg-primary/10',
+        bgGradient: 'bg-gradient-to-br from-orange-50 to-transparent',
+        trend: 'neutral',
+        change: 'Lifetime group expenses'
+      },
+      {
+        title: 'Pending Amount',
+        value: `₹${pendingAmount}`,
+        icon: <ArrowUpCircle />,
+        color: 'destructive',
+        bgColor: 'bg-destructive/10',
+        bgGradient: 'bg-gradient-to-br from-red-50 to-transparent',
+        trend: 'down',
+        change: 'Pending balance'
+      },
+      {
+        title: 'Settled Amount',
+        value: `₹${settledAmount}`,
+        icon: <ArrowDownCircle />,
+        color: 'success',
+        bgColor: 'bg-success/10',
+        bgGradient: 'bg-gradient-to-br from-green-50 to-transparent',
+        trend: 'up',
+        change: 'Amount owed to you'
+      },
+      {
+        title: 'Total Settlements',
+        value: totalSettlements.toString(),
+        icon: <Handshake />,
+        color: 'secondary',
+        bgColor: 'bg-secondary/10',
+        bgGradient: 'bg-gradient-to-br from-slate-50 to-transparent',
+        trend: 'neutral',
+        change: 'Settlement suggestions'
+      },
+      {
+        title: 'Active Groups',
+        value: (stats.activeGroups ?? 0).toString(),
+        icon: <Users />,
+        color: 'info',
+        bgColor: 'bg-blue-500/10',
+        bgGradient: 'bg-gradient-to-br from-blue-50 to-transparent',
+        trend: 'neutral',
+        change: 'Active groups'
+      }
+    ];
+  }, [stats, pendingAmount, settledAmount, totalSettlements]);
 
   const [mounted, setMounted] = useState(false);
 
@@ -91,16 +108,18 @@ function Dashboard() {
     return () => clearTimeout(id);
   }, []);
 
-  const recentExpenses = recentExpensesData?.map(expense => ({
-    id: expense.id,
-    description: expense.description,
-    group: expense.group.name,
-    date: new Date(expense.createdAt).toLocaleDateString(),
-    amount: expense.amount.toString(),
-    status: 'pending',
-    avatar: expense.user.avatarUrl,
-    paidBy: expense.user.displayName
-  })) ?? [];
+  const recentExpenses = useMemo(() => {
+    return recentExpensesData?.map(expense => ({
+      id: expense.id,
+      description: expense.description,
+      group: expense.group.name,
+      date: new Date(expense.createdAt).toLocaleDateString(),
+      amount: expense.amount.toString(),
+      status: expense.isSettled ? 'settled' : 'pending',
+      avatar: expense.user.avatarUrl,
+      paidBy: expense.user.displayName
+    })) ?? [];
+  }, [recentExpensesData]);
 
   const quickActions = [
     {
@@ -129,19 +148,39 @@ function Dashboard() {
     }
   ];
 
-  const activeGroups = activeGroupsData?.map((group, index) => ({
-    ...group,
-    color: ['bg-primary', 'bg-green-500', 'bg-blue-500'][index % 3],
-    icon: [<Plane className="h-5 w-5" />, <Building2 className="h-5 w-5" />, <Home className="h-5 w-5" />][index % 3],
-    balance: Number(group.balance)
-  })) ?? [];
+  const activeGroups = useMemo(() => {
+    return activeGroupsData?.map((group, index) => ({
+      ...group,
+      color: ['bg-primary', 'bg-green-500', 'bg-blue-500'][index % 3],
+      icon: [<Plane className="h-5 w-5" key="p" />, <Building2 className="h-5 w-5" key="b" />, <Home className="h-5 w-5" key="h" />][index % 3],
+      balance: Number(group.balance)
+    })) ?? [];
+  }, [activeGroupsData]);
 
-  const mySettlements = (settlements ?? []).filter((settlement) => settlement.from.id === userId);
+  const categorySpending = useMemo(() => {
+    if (!recentExpensesData || recentExpensesData.length === 0) return [];
 
-  const handleSettle = (settlement: { from: { id: string }; to: { id: string }; amount: string }) => {
-    if (!selectedGroupId) {
-      return;
-    }
+    const totals = recentExpensesData.reduce<Record<string, number>>((acc, expense) => {
+      acc[expense.category] = (acc[expense.category] ?? 0) + Number(expense.amount);
+      return acc;
+    }, {});
+
+    const sorted = Object.entries(totals).sort(([, a], [, b]) => b - a).slice(0, 5);
+    const maxAmount = Math.max(...Object.values(totals), 1);
+
+    return sorted.map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: Math.min(100, (amount / maxAmount) * 100)
+    }));
+  }, [recentExpensesData]);
+
+  const mySettlements = useMemo(() => {
+    return (settlements ?? []).filter((settlement) => settlement.from.id === userId);
+  }, [settlements, userId]);
+
+  const handleSettle = (settlement: { from: { id: string }; to: { id: string }; amount: string; expense_id?: string }) => {
+    if (!selectedGroupId) return;
 
     createSettlement({
       group_id: selectedGroupId,
@@ -149,6 +188,7 @@ function Dashboard() {
       to_user_id: settlement.to.id,
       amount: Number(settlement.amount),
       method: "ONLINE",
+      expense_id: settlement.expense_id,
     });
   };
 
@@ -163,9 +203,9 @@ function Dashboard() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {isLoadingStats ? (
-          Array.from({ length: 4 }).map((_, i) => (
+          Array.from({ length: 5 }).map((_, i) => (
             <Card key={i} className="rounded-2xl border border-border/60 shadow-sm h-28 p-4">
               <CardContent className="p-4">
                 <Skeleton className="h-6 w-24 mb-2" />
@@ -174,38 +214,38 @@ function Dashboard() {
             </Card>
           ))
         ) : (
-          summaryStats.map((stat, index) => (
-          <Card
-            key={index}
-            className={`${stat.bgGradient} ${stat.bgColor} rounded-2xl border border-border/60 shadow-sm hover:shadow-lg transform hover:-translate-y-1 transition-all duration-300 h-28 backdrop-blur-sm`}
-          >
-            <CardContent className="p-4 flex flex-col justify-between h-full">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs text-muted-foreground">{stat.title}</p>
-                  <h3 className={`text-3xl font-extrabold mt-1 transition-transform duration-500 ${mounted ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}>{stat.value}</h3>
+          summaryStats.map((stat) => (
+            <Card
+              key={stat.title}
+              className={`${stat.bgGradient} ${stat.bgColor} rounded-2xl border border-border/60 shadow-sm hover:shadow-lg transform hover:-translate-y-1 transition-all duration-300 h-28 backdrop-blur-sm`}
+            >
+              <CardContent className="p-4 flex flex-col justify-between h-full">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-xs text-muted-foreground">{stat.title}</p>
+                    <h3 className={`text-3xl font-extrabold mt-1 transition-transform duration-500 ${mounted ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}>{stat.value}</h3>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <div className="h-10 w-10 rounded-md flex items-center justify-center text-white bg-white/10">{stat.icon}</div>
+                    <span className="text-xs text-muted-foreground mt-2">{stat.change}</span>
+                  </div>
                 </div>
-                <div className="flex flex-col items-end">
-                  <div className="h-10 w-10 rounded-md flex items-center justify-center text-white bg-white/10">{stat.icon}</div>
-                  <span className="text-xs text-muted-foreground mt-2">{stat.change}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
           ))
         )}
       </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        {quickActions.slice(0,3).map((action, idx) => (
-          <a key={idx} href={action.to} className="flex items-center gap-3 p-4 rounded-2xl bg-card border border-border shadow-sm hover:shadow-lg transform hover:scale-105 transition-all duration-200">
+        {quickActions.slice(0,3).map((action) => (
+          <Link key={action.to} to={action.to} className="flex items-center gap-3 p-4 rounded-2xl bg-card border border-border shadow-sm hover:shadow-lg transform hover:scale-105 transition-all duration-200">
             <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center">{action.icon}</div>
             <div>
               <div className="text-sm font-medium">{action.title}</div>
               <div className="text-xs text-muted-foreground">{action.subtitle}</div>
             </div>
-          </a>
+          </Link>
         ))}
       </div>
 
@@ -216,10 +256,10 @@ function Dashboard() {
             <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-4 px-6 gap-3">
               <CardTitle className="text-2xl">Recent Expenses</CardTitle>
               <Button variant="link" size="sm" asChild>
-                <a href="/expenses" className="flex items-center text-sm">
+                <Link to="/dashboard/expense" className="flex items-center text-sm">
                   View All
                   <ChevronRight className="ml-1 h-4 w-4" />
-                </a>
+                </Link>
               </Button>
             </CardHeader>
 
@@ -229,6 +269,13 @@ function Dashboard() {
                   <Skeleton className="h-12" />
                   <Skeleton className="h-12" />
                   <Skeleton className="h-12" />
+                </div>
+              ) : isRecentError ? (
+                <div className="p-4">
+                  <Alert>
+                    <AlertTitle>Error loading recent expenses</AlertTitle>
+                    <p className="text-xs text-muted-foreground">{(recentError as any)?.message || 'Unable to load recent expenses.'}</p>
+                  </Alert>
                 </div>
               ) : recentExpenses.length > 0 ? (
                 <div className="divide-y divide-border">
@@ -278,12 +325,13 @@ function Dashboard() {
             </div>
           </Card>
         </div>
+
         {/* Active Groups (30%) */}
         <div className="lg:col-span-3 space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <h3 className="text-2xl font-semibold">Active Groups</h3>
             <Button variant="link" size="sm" asChild>
-              <a href="/groups" className="flex items-center text-sm">View All <ChevronRight className="ml-1 h-4 w-4" /></a>
+              <Link to="/dashboard/group" className="flex items-center text-sm">View All <ChevronRight className="ml-1 h-4 w-4" /></Link>
             </Button>
           </div>
 
@@ -308,11 +356,18 @@ function Dashboard() {
               </>
             )}
 
-            {!isLoadingGroups && activeGroups.length > 0 && (
+            {isGroupsError ? (
+              <div className="p-4">
+                <Alert>
+                  <AlertTitle>Error loading groups</AlertTitle>
+                  <p className="text-xs text-muted-foreground">{(groupsError as any)?.message || 'Unable to load groups.'}</p>
+                </Alert>
+              </div>
+            ) : !isLoadingGroups && activeGroups.length > 0 && (
               <>
                 {activeGroups.map((group) => (
                   <div key={group.id} className="rounded-xl border border-border p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-transform duration-200 hover:-translate-y-1">
-                    <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto w-full sm:w-auto">
+                    <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
                       <div className={`h-12 w-12 rounded-full flex items-center justify-center text-white ${group.color}`}>{group.icon}</div>
                       <div className="min-w-0">
                         <p className="font-medium truncate">{group.name}</p>
@@ -323,7 +378,7 @@ function Dashboard() {
                       <div className="text-sm text-muted-foreground">Your Balance</div>
                       <div className={`text-lg font-bold ${group.balance > 0 ? 'text-green-500' : group.balance < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>{group.balance > 0 ? '+' : ''}₹{Math.abs(group.balance)}</div>
                       <Button size="sm" variant="outline" className="rounded-full transition-transform duration-200 hover:scale-105 w-full sm:w-auto" asChild>
-                        <a href={`/groups/${group.id}`}>View</a>
+                        <Link to={`/groups/${group.id}`}>View</Link>
                       </Button>
                     </div>
                   </div>
@@ -337,7 +392,7 @@ function Dashboard() {
                   <AlertTitle>No groups yet</AlertTitle>
                   <p>Create your first group to start splitting expenses.</p>
                   <Button variant="outline" size="sm" className="mt-2" asChild>
-                    <a href="/groups/create">Create Group</a>
+                    <Link to="/groups/create">Create Group</Link>
                   </Button>
                 </Alert>
               </div>
@@ -350,7 +405,10 @@ function Dashboard() {
       {selectedGroupId && (
         <Card className="mb-6 max-h-56 overflow-auto">
           <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-4 gap-3">
-            <CardTitle>Suggested Settlements</CardTitle>
+            <div>
+              <CardTitle>Suggested Settlements</CardTitle>
+              <p className="text-xs text-muted-foreground">Total settlements: {totalSettlements}</p>
+            </div>
             {isLoadingSettlements && (
               <div className="text-sm text-muted-foreground">Loading...</div>
             )}
@@ -361,6 +419,13 @@ function Dashboard() {
                 <div className="p-4 space-y-2">
                   <Skeleton className="h-12" />
                   <Skeleton className="h-12" />
+                </div>
+              ) : isSettlementsError ? (
+                <div className="p-4">
+                  <Alert>
+                    <AlertTitle>Error loading settlements</AlertTitle>
+                    <p className="text-xs text-muted-foreground">{(settlementsError as any)?.message || 'Unable to load settlement suggestions.'}</p>
+                  </Alert>
                 </div>
               ) : mySettlements.length > 0 ? (
                 mySettlements.map((settlement, index) => {
@@ -413,10 +478,39 @@ function Dashboard() {
             <CardTitle>Monthly Spending</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <div className="h-[200px] flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg">
-              <LineChart className="h-16 w-16 text-muted-foreground/50" />
-              <p className="text-center text-muted-foreground mt-2">Chart will be implemented</p>
-            </div>
+            {isLoadingMonthly ? (
+              <div className="p-4 space-y-3">
+                <Skeleton className="h-12" />
+                <Skeleton className="h-12" />
+              </div>
+            ) : isMonthlyError ? (
+              <div className="p-4">
+                <Alert>
+                  <AlertTitle>Error loading monthly spending</AlertTitle>
+                  <p className="text-xs text-muted-foreground">{(monthlyError as any)?.message || 'Unable to load monthly spending data.'}</p>
+                </Alert>
+              </div>
+            ) : monthlySpendingData && Object.keys(monthlySpendingData).length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-end gap-2 h-40">
+                  {Object.entries(monthlySpendingData).map(([month, amount]) => {
+                    const numeric = Number(amount);
+                    const max = Math.max(...Object.values(monthlySpendingData).map((value) => Number(value)), 1);
+                    return (
+                      <div key={month} className="flex flex-col items-center gap-2 text-[10px] text-muted-foreground">
+                        <div className="w-6 rounded-t-md bg-primary" style={{ height: `${(numeric / max) * 100}%`, minHeight: '10px' }} />
+                        <span>{month}</span>
+                        <span className="text-[10px]">₹{numeric}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="h-[200px] flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg">
+                <p className="text-sm text-muted-foreground">No monthly spending data available.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
         
@@ -425,10 +519,37 @@ function Dashboard() {
             <CardTitle>Expense Categories</CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            <div className="h-[200px] flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg">
-              <div className="h-16 w-16 rounded-full border-4 border-muted-foreground/50 border-t-primary"></div>
-              <p className="text-center text-muted-foreground mt-2">Chart will be implemented</p>
-            </div>
+            {isLoadingRecent ? (
+              <div className="p-4 space-y-3">
+                <Skeleton className="h-12" />
+                <Skeleton className="h-12" />
+              </div>
+            ) : isRecentError ? (
+              <div className="p-4">
+                <Alert>
+                  <AlertTitle>Error loading categories</AlertTitle>
+                  <p className="text-xs text-muted-foreground">{(recentError as any)?.message || 'Unable to load category data.'}</p>
+                </Alert>
+              </div>
+            ) : categorySpending.length > 0 ? (
+              <div className="space-y-3">
+                {categorySpending.map(({ category, amount, percentage }) => (
+                  <div key={category} className="space-y-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{category}</span>
+                      <span>₹{amount}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${percentage}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-[200px] flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg">
+                <p className="text-sm text-muted-foreground">No category data available.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

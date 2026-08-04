@@ -209,6 +209,11 @@ export const useCreateExpenseMutation = () => {
     mutationFn: createExpense,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
+      queryClient.invalidateQueries({ queryKey: ["recentExpenses"] });
+      queryClient.invalidateQueries({ queryKey: ["activeGroups"] });
+      queryClient.invalidateQueries({ queryKey: ["monthlySpending"] });
+      queryClient.invalidateQueries({ queryKey: ["settlements"] });
       console.log("Expense created successfully:", data);
     },
     onError: (error) => {

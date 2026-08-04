@@ -54,6 +54,7 @@ interface Expense {
   paid_by: string;
   paid?: ExpenseUserSummary;
   currency_code?: string;
+  isSettled?: boolean;
   expensePayments?: ExpensePayment[];
   splitExpense?: ExpenseSplit[];
 }
@@ -142,8 +143,13 @@ export function useSettleExpense() {
       return response.data;
     },
     onSuccess: () => {
+      // 🚀 Yahan bhi sare keys invalidate karo
+      queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
+      queryClient.invalidateQueries({ queryKey: ["activeGroups"] });
+      queryClient.invalidateQueries({ queryKey: ["recentExpenses"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["settlements"] });
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
     },
   });
 }
-
